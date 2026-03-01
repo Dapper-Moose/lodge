@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import AppLayout from '@/components/AppLayout'
 
@@ -12,85 +12,109 @@ type Project = {
   status: string
   start_date: string | null
   due_date: string | null
-  loe_budget: number
-  created_at: string
-  clients: { name: string } | null
+  loe_budget: number | null
+  client_id: string | null
+  clients: { name: string } | { name: string }[] | null
 }
 
 type Task = {
   id: string
   title: string
   status: string
-  priority: string
+  priority: string | null
   due_date: string | null
   estimated_hours: number | null
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; color: string; bg: string }> = {
-    on_track:    { label: 'On Track',    color: '#16a34a', bg: '#dcfce7' },
-    at_risk:     { label: 'At Risk',     color: '#d97706', bg: '#fef3c7' },
-    over_budget: { label: 'Over Budget', color: '#dc2626', bg: '#fee2e2' },
-    completed:   { label: 'Completed',   color: '#6b7280', bg: '#f3f4f6' },
+type TimeEntry = {
+  id: string
+  hours: number
+  entry_date: string
+  description: string | null
+  user_id: string
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '9px 12px', borderRadius: 8,
+  border: '1px solid #d1d5db', fontSize: 13, color: '#1a1a2e',
+  outline: 'none', boxSizing: 'border-box', background: 'white',
+  fontFamily: 'inherit',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 12, fontWeight: 600,
+  color: '#374151', marginBottom: 6,
+}
+
+const primaryBtnStyle: React.CSSProperties = {
+  background: '#5046e5', color: 'white', border: 'none',
+  borderRadius: 8, padding: '8px 16px', fontSize: 13,
+  fontWeight: 600, cursor: 'pointer',
+}
+
+const ghostBtnStyle: React.CSSProperties = {
+  background: 'white', color: '#374151', border: '1px solid #d1d5db',
+  borderRadius: 8, padding: '8px 16px', fontSize: 13,
+  fontWeight: 600, cursor: 'pointer',
+}
+
+function getClientName(clients: Project['clients']): string | null {
+  if (!clients) return null
+  if (Array.isArray(clients)) return clients[0]?.name || null
+  return clients.name || null
+}
+
+function statusInfo(status: string) {
+  const map: Record<string, { label: string; bg: string; color: string }> = {
+    on_track:    { label: 'On Track',    bg: '#dcfce7', color: '#16a34a' },
+    at_risk:     { label: 'At Risk',     bg: '#fef9c3', color: '#b45309' },
+    over_budget: { label: 'Over Budget', bg: '#fee2e2', color: '#dc2626' },
+    completed:   { label: 'Completed',   bg: '#f3f4f6', color: '#6b7280' },
   }
-  const s = map[status] || map.on_track
-  return (
-    <span style={{
-      background: s.bg, color: s.color, fontSize: 12, fontWeight: 600,
-      padding: '4px 10px', borderRadius: 20,
-    }}>
-      {s.label}
-    </span>
-  )
+  return map[status] || map.on_track
 }
 
-function formatDate(d: string | null) {
-  if (!d) return '—'
-  return new Date(d + 'T12:00:00').toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric',
-  })
+function priorityInfo(priority: string | null) {
+  const map: Record<string, { label: string; color: string }> = {
+    high:   { label: 'High',   color: '#dc2626' },
+    medium: { label: 'Medium', color: '#d97706' },
+    low:    { label: 'Low',    color: '#6b7280' },
+  }
+  return map[priority || 'medium'] || map.medium
 }
 
-// ─── ADD TASK MODAL ──────────────────────────────
-function AddTaskModal({ projectId, workspaceId, onClose, onCreated }: {
-  projectId: string
-  workspaceId: string
+// ─── EDIT PROJECT MODAL ───────────────────────────────────
+function EditProjectModal({ project, onClose, onSaved }: {
+  project: Project
   onClose: () => void
-  onCreated: () => void
+  onSaved: () => void
 }) {
   const supabase = createClient()
-  const [title,          setTitle]          = useState('')
-  const [status,         setStatus]         = useState('todo')
-  const [priority,       setPriority]       = useState('medium')
-  const [dueDate,        setDueDate]        = useState('')
-  const [estimatedHours, setEstimatedHours] = useState('')
-  const [description,    setDescription]    = useState('')
-  const [error,          setError]          = useState('')
-  const [loading,        setLoading]        = useState(false)
+  const [name,      setName]      = useState(project.name)
+  const [desc,      setDesc]      = useState(project.description || '')
+  const [status,    setStatus]    = useState(project.status)
+  const [startDate, setStartDate] = useState(project.start_date || '')
+  const [dueDate,   setDueDate]   = useState(project.due_date || '')
+  const [budget,    setBudget]    = useState(project.loe_budget?.toString() || '')
+  const [error,     setError]     = useState('')
+  const [loading,   setLoading]   = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.from('tasks').insert({
-      project_id:      projectId,
-      workspace_id:    workspaceId,
-      title,
+    const { error } = await supabase.from('projects').update({
+      name,
+      description:  desc      || null,
       status,
-      priority,
-      due_date:        dueDate || null,
-      estimated_hours: estimatedHours ? parseFloat(estimatedHours) : null,
-      description:     description || null,
-    })
+      start_date:   startDate || null,
+      due_date:     dueDate   || null,
+      loe_budget:   budget    ? parseFloat(budget) : null,
+    }).eq('id', project.id)
 
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
-
-    onCreated()
+    if (error) { setError(error.message); setLoading(false); return }
+    onSaved()
   }
 
   return (
@@ -104,106 +128,55 @@ function AddTaskModal({ projectId, workspaceId, onClose, onCreated }: {
         maxHeight: '90vh', overflowY: 'auto',
         boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
       }}>
-        {/* Header */}
-        <div style={{
-          padding: '24px 24px 0',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
+        <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>Add Task</div>
-            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Add a task to this project</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>Edit Project</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Update project details</div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af', padding: 4 }}
-          >✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af', padding: 4 }}>X</button>
         </div>
-
         <form onSubmit={handleSubmit} style={{ padding: 24 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
             <div>
-              <label style={labelStyle}>Task Title *</label>
-              <input
-                required
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="e.g. Design homepage mockup"
-                style={inputStyle}
-              />
+              <label style={labelStyle}>Project Name *</label>
+              <input required value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
             </div>
-
             <div>
               <label style={labelStyle}>Description</label>
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Optional details about this task"
-                rows={3}
-                style={{ ...inputStyle, resize: 'vertical' }}
-              />
+              <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
             </div>
-
+            <div>
+              <label style={labelStyle}>Status</label>
+              <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
+                <option value="on_track">On Track</option>
+                <option value="at_risk">At Risk</option>
+                <option value="over_budget">Over Budget</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={labelStyle}>Status</label>
-                <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="review">In Review</option>
-                  <option value="done">Done</option>
-                </select>
+                <label style={labelStyle}>Start Date</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inputStyle} />
               </div>
-              <div>
-                <label style={labelStyle}>Priority</label>
-                <select value={priority} onChange={e => setPriority(e.target.value)} style={inputStyle}>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>Due Date</label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={e => setDueDate(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Estimated Hours</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={estimatedHours}
-                  onChange={e => setEstimatedHours(e.target.value)}
-                  placeholder="e.g. 4"
-                  style={inputStyle}
-                />
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={inputStyle} />
               </div>
             </div>
-
+            <div>
+              <label style={labelStyle}>LOE Budget (hours)</label>
+              <input type="number" min="0" step="0.5" value={budget} onChange={e => setBudget(e.target.value)} placeholder="e.g. 100" style={inputStyle} />
+            </div>
             {error && (
-              <div style={{
-                fontSize: 13, color: '#dc2626', background: '#fef2f2',
-                border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px',
-              }}>
+              <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>
                 {error}
               </div>
             )}
-
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button type="button" onClick={onClose} style={ghostBtnStyle}>Cancel</button>
-              <button type="submit" disabled={loading} style={primaryBtnStyle}>
-                {loading ? 'Adding…' : 'Add Task'}
-              </button>
+              <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading ? 'Saving...' : 'Save Changes'}</button>
             </div>
-
           </div>
         </form>
       </div>
@@ -211,45 +184,150 @@ function AddTaskModal({ projectId, workspaceId, onClose, onCreated }: {
   )
 }
 
-// ─── PROJECT DETAIL PAGE ─────────────────────────
+// ─── ADD TASK MODAL ───────────────────────────────────────
+function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
+  projectId: string
+  workspaceId: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const supabase = createClient()
+  const [title,    setTitle]    = useState('')
+  const [priority, setPriority] = useState('medium')
+  const [dueDate,  setDueDate]  = useState('')
+  const [estHours, setEstHours] = useState('')
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    const { error } = await supabase.from('tasks').insert({
+      workspace_id:     workspaceId,
+      project_id:       projectId,
+      title,
+      priority,
+      due_date:         dueDate   || null,
+      estimated_hours:  estHours  ? parseFloat(estHours) : null,
+      status:           'todo',
+    })
+
+    if (error) { setError(error.message); setLoading(false); return }
+    onSaved()
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 100, padding: 20,
+    }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>Add Task</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Add a new task to this project</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af', padding: 4 }}>X</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Task Title *</label>
+              <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Write copy for homepage" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Priority</label>
+              <select value={priority} onChange={e => setPriority(e.target.value)} style={inputStyle}>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Due Date</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Estimated Hours</label>
+                <input type="number" min="0" step="0.5" value={estHours} onChange={e => setEstHours(e.target.value)} placeholder="e.g. 4" style={inputStyle} />
+              </div>
+            </div>
+            {error && (
+              <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>{error}</div>
+            )}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" onClick={onClose} style={ghostBtnStyle}>Cancel</button>
+              <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading ? 'Saving...' : 'Add Task'}</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────
 export default function ProjectDetailPage() {
-  const router    = useRouter()
-  const params    = useParams()
-  const supabase  = createClient()
+  const supabase = createClient()
+  const params   = useParams()
+  const router   = useRouter()
   const projectId = params.id as string
 
   const [project,     setProject]     = useState<Project | null>(null)
   const [tasks,       setTasks]       = useState<Task[]>([])
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
   const [loading,     setLoading]     = useState(true)
-  const [showModal,   setShowModal]   = useState(false)
+  const [showEdit,    setShowEdit]    = useState(false)
+  const [showAddTask, setShowAddTask] = useState(false)
 
   useEffect(() => { loadProject() }, [projectId])
 
   async function loadProject() {
     setLoading(true)
 
-    const { data: project } = await supabase
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: member } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!member) return
+    setWorkspaceId(member.workspace_id)
+
+    const { data: proj } = await supabase
       .from('projects')
       .select('*, clients(name)')
       .eq('id', projectId)
       .single()
 
-    if (!project) { router.push('/projects'); return }
-    setProject(project)
-    setWorkspaceId(project.workspace_id)
-
-    const { data: tasks } = await supabase
+    const { data: taskData } = await supabase
       .from('tasks')
-      .select('*')
+      .select('id, title, status, priority, due_date, estimated_hours')
       .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
 
-    setTasks((tasks as Task[]) || [])
+    const { data: timeData } = await supabase
+      .from('time_entries')
+      .select('id, hours, entry_date, description, user_id')
+      .eq('project_id', projectId)
+      .order('entry_date', { ascending: false })
+      .limit(5)
+
+    setProject(proj as unknown as Project)
+    setTasks((taskData as Task[]) || [])
+    setTimeEntries((timeData as TimeEntry[]) || [])
     setLoading(false)
   }
 
-  async function toggleTaskDone(task: Task) {
+  async function toggleTask(task: Task) {
     const newStatus = task.status === 'done' ? 'todo' : 'done'
     await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id)
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t))
@@ -258,238 +336,274 @@ export default function ProjectDetailPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading…</div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 13 }}>
+          Loading...
         </div>
       </AppLayout>
     )
   }
 
-  if (!project) return null
+  if (!project) {
+    return (
+      <AppLayout>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 13 }}>
+          Project not found.
+        </div>
+      </AppLayout>
+    )
+  }
 
-  const clientName = Array.isArray(project.clients)
-    ? (project.clients as any[])[0]?.name
-    : project.clients?.name
-
-  const totalTasks     = tasks.length
-  const completedTasks = tasks.filter(t => t.status === 'done').length
-  const progress       = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+  const clientName    = getClientName(project.clients)
+  const si            = statusInfo(project.status)
+  const doneTasks     = tasks.filter(t => t.status === 'done').length
+  const totalTasks    = tasks.length
+  const taskPct       = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+  const totalLogged   = timeEntries.reduce((sum, e) => sum + e.hours, 0)
+  const budget        = project.loe_budget || 0
+  const budgetPct     = budget > 0 ? Math.min(Math.round((totalLogged / budget) * 100), 100) : 0
+  const budgetColor   = budgetPct >= 90 ? '#dc2626' : budgetPct >= 70 ? '#d97706' : '#16a34a'
 
   return (
     <AppLayout>
-
       {/* Top bar */}
       <div style={{
         height: 56, background: 'white', borderBottom: '1px solid #e5e7eb',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 28px', flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
             onClick={() => router.push('/projects')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 13, padding: 0 }}
+            style={{ fontSize: 13, color: '#9ca3af', cursor: 'pointer', fontWeight: 500 }}
           >
             Projects
-          </button>
+          </span>
           <span style={{ color: '#d1d5db' }}>›</span>
-          <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>{project.name}</span>
+          <span style={{ fontSize: 13, color: '#1a1a2e', fontWeight: 600 }}>{project.name}</span>
         </div>
-        <StatusBadge status={project.status} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ ...si, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
+            {si.label}
+          </span>
+          <button onClick={() => setShowEdit(true)} style={ghostBtnStyle}>Edit Project</button>
+        </div>
       </div>
 
-      {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 32px' }}>
-        <div style={{ maxWidth: 900 }}>
+      {/* Body — two column layout */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, maxWidth: 1100, alignItems: 'start' }}>
 
-          {/* Header */}
-          <div style={{ marginBottom: 28 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
-              {project.name}
-            </h1>
-            {clientName && (
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-                Client: {clientName}
+          {/* LEFT COLUMN */}
+          <div>
+            {/* Project header */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e', marginBottom: 4 }}>{project.name}</div>
+              {clientName && <div style={{ fontSize: 13, color: '#6b7280' }}>{clientName}</div>}
+              {project.description && (
+                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 8, lineHeight: 1.6 }}>{project.description}</div>
+              )}
+            </div>
+
+            {/* Stat cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+              {[
+                { label: 'Start Date',   value: project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                { label: 'Due Date',     value: project.due_date   ? new Date(project.due_date   + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                { label: 'LOE Budget',   value: budget ? `${budget}h` : '—' },
+                { label: 'Tasks',        value: `${doneTasks} / ${totalTasks}` },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: 'white', borderRadius: 10, border: '1px solid #e5e7eb', padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 4 }}>{stat.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{stat.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Task progress bar */}
+            {totalTasks > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
+                  <span>Task completion</span>
+                  <span>{taskPct}%</span>
+                </div>
+                <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${taskPct}%`, background: '#5046e5', borderRadius: 4, transition: 'width 0.3s ease' }} />
+                </div>
               </div>
             )}
-            {project.description && (
-              <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, maxWidth: 600 }}>
-                {project.description}
-              </p>
-            )}
-          </div>
 
-          {/* Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
-            {[
-              { label: 'Start Date', value: formatDate(project.start_date) },
-              { label: 'Due Date',   value: formatDate(project.due_date) },
-              { label: 'LOE Budget', value: project.loe_budget ? `${project.loe_budget}h` : '—' },
-              { label: 'Tasks',      value: `${completedTasks}/${totalTasks}` },
-            ].map(stat => (
-              <div key={stat.label} style={{
-                background: 'white', borderRadius: 12,
-                border: '1px solid #e5e7eb', padding: '16px 20px',
+            {/* Tasks section */}
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{
+                padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                  {stat.label}
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
-                  {stat.value}
-                </div>
+                <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Tasks</span>
+                <button onClick={() => setShowAddTask(true)} style={primaryBtnStyle}>+ Add Task</button>
               </div>
-            ))}
-          </div>
 
-          {/* Progress */}
-          {totalTasks > 0 && (
-            <div style={{
-              background: 'white', borderRadius: 12,
-              border: '1px solid #e5e7eb', padding: '20px 24px', marginBottom: 24,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>Overall Progress</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#5046e5' }}>{progress}%</span>
-              </div>
-              <div style={{ background: '#f3f4f6', borderRadius: 99, height: 8, overflow: 'hidden' }}>
-                <div style={{
-                  width: `${progress}%`, height: '100%',
-                  background: '#5046e5', borderRadius: 99,
-                  transition: 'width 0.4s ease',
-                }} />
-              </div>
-            </div>
-          )}
-
-          {/* Tasks */}
-          <div style={{
-            background: 'white', borderRadius: 12,
-            border: '1px solid #e5e7eb', overflow: 'hidden',
-          }}>
-            <div style={{
-              padding: '16px 24px', borderBottom: '1px solid #e5e7eb',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Tasks</span>
-              <button onClick={() => setShowModal(true)} style={primaryBtnStyle}>
-                + Add Task
-              </button>
-            </div>
-
-            {tasks.length === 0 ? (
-              <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>No tasks yet</div>
-                <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
-                  Break this project down into manageable tasks
+              {tasks.length === 0 && (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                  No tasks yet. Add your first task to get started.
                 </div>
-                <button onClick={() => setShowModal(true)} style={primaryBtnStyle}>
-                  + Add Task
-                </button>
-              </div>
-            ) : (
-              <div>
-                {tasks.map((task, i) => (
-                  <div
-                    key={task.id}
-                    style={{
-                      padding: '14px 24px',
-                      borderBottom: i < tasks.length - 1 ? '1px solid #f3f4f6' : 'none',
-                      display: 'flex', alignItems: 'center', gap: 12,
-                    }}
-                  >
+              )}
+
+              {tasks.map((task, i) => {
+                const pi = priorityInfo(task.priority)
+                const isDone = task.status === 'done'
+                return (
+                  <div key={task.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 20px',
+                    borderBottom: i < tasks.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  }}>
                     {/* Checkbox */}
-                    <button
-                      onClick={() => toggleTaskDone(task)}
+                    <div
+                      onClick={() => toggleTask(task)}
                       style={{
-                        width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                        border: task.status === 'done' ? '2px solid #5046e5' : '2px solid #d1d5db',
-                        background: task.status === 'done' ? '#5046e5' : 'transparent',
+                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                        border: isDone ? 'none' : '1.5px solid #d1d5db',
+                        background: isDone ? '#16a34a' : 'white',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', padding: 0,
+                        cursor: 'pointer', fontSize: 10, color: 'white',
                       }}
                     >
-                      {task.status === 'done' && (
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </button>
-
-                    {/* Title & date */}
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-  fontSize: 13, fontWeight: 500,
-  textDecoration: task.status === 'done' ? 'line-through' : 'none',
-  color: task.status === 'done' ? '#9ca3af' : '#1a1a2e',
-}}>
-                        {task.title}
-                      </div>
-                      {task.due_date && (
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                          Due {formatDate(task.due_date)}
-                        </div>
-                      )}
+                      {isDone && '✓'}
                     </div>
 
-                    {/* Est. hours */}
-                    {task.estimated_hours && (
-                      <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                        {task.estimated_hours}h
-                      </div>
-                    )}
+                    {/* Title */}
+                    <div style={{ flex: 1, fontSize: 13, fontWeight: 500, color: isDone ? '#9ca3af' : '#1a1a2e', textDecoration: isDone ? 'line-through' : 'none' }}>
+                      {task.title}
+                    </div>
 
-                    {/* Priority */}
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-                      background: task.priority === 'high' ? '#fee2e2' : task.priority === 'low' ? '#f3f4f6' : '#fef3c7',
-                      color: task.priority === 'high' ? '#dc2626' : task.priority === 'low' ? '#6b7280' : '#d97706',
-                    }}>
-                      {task.priority}
-                    </span>
-
+                    {/* Meta */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {task.due_date && (
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                      {task.estimated_hours && (
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{task.estimated_hours}h</span>
+                      )}
+                      <span style={{ fontSize: 11, fontWeight: 600, color: pi.color, background: '#f3f4f6', padding: '2px 7px', borderRadius: 20 }}>
+                        {pi.label}
+                      </span>
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              })}
+            </div>
           </div>
 
+          {/* RIGHT SIDEBAR */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* LOE Budget card */}
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
+                Hours Budget
+              </div>
+
+              {budget > 0 ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <span style={{ fontSize: 26, fontWeight: 800, color: budgetColor }}>{totalLogged.toFixed(1)}h</span>
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>of {budget}h</span>
+                  </div>
+                  <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+                    <div style={{ height: '100%', width: `${budgetPct}%`, background: budgetColor, borderRadius: 4, transition: 'width 0.3s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af' }}>
+                    <span style={{ color: budgetColor, fontWeight: 600 }}>{budgetPct}% used</span>
+                    <span>{(budget - totalLogged).toFixed(1)}h remaining</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>No budget set. Edit the project to add an LOE budget.</div>
+              )}
+            </div>
+
+            {/* Recent time entries */}
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
+                Recent Time Entries
+              </div>
+
+              {timeEntries.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>No time logged yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {timeEntries.map(entry => (
+                    <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 500 }}>
+                          {new Date(entry.entry_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                        {entry.description && (
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, lineHeight: 1.4 }}>
+                            {entry.description}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#5046e5', marginLeft: 8, flexShrink: 0 }}>
+                        {entry.hours}h
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Project info */}
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
+                Project Info
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: '#6b7280' }}>Client</span>
+                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{clientName || '—'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: '#6b7280' }}>Status</span>
+                  <span style={{ fontWeight: 600, color: si.color }}>{si.label}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: '#6b7280' }}>Start</span>
+                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+                    {project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: '#6b7280' }}>Due</span>
+                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+                    {project.due_date ? new Date(project.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <AddTaskModal
-          projectId={projectId}
-          workspaceId={workspaceId}
-          onClose={() => setShowModal(false)}
-          onCreated={() => { setShowModal(false); loadProject() }}
+      {showEdit && (
+        <EditProjectModal
+          project={project}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => { setShowEdit(false); loadProject() }}
         />
       )}
 
+      {showAddTask && (
+        <AddTaskModal
+          projectId={projectId}
+          workspaceId={workspaceId}
+          onClose={() => setShowAddTask(false)}
+          onSaved={() => { setShowAddTask(false); loadProject() }}
+        />
+      )}
     </AppLayout>
   )
-}
-
-// ─── STYLES ──────────────────────────────────────
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 600,
-  color: '#374151', marginBottom: 6,
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 12px', borderRadius: 8,
-  border: '1px solid #d1d5db', fontSize: 13, color: '#1a1a2e',
-  outline: 'none', boxSizing: 'border-box', background: 'white',
-  fontFamily: 'inherit',
-}
-
-const primaryBtnStyle: React.CSSProperties = {
-  background: '#5046e5', color: 'white', border: 'none',
-  borderRadius: 8, padding: '8px 16px', fontSize: 13,
-  fontWeight: 600, cursor: 'pointer',
-}
-
-const ghostBtnStyle: React.CSSProperties = {
-  background: 'white', color: '#374151', border: '1px solid #d1d5db',
-  borderRadius: 8, padding: '8px 16px', fontSize: 13,
-  fontWeight: 600, cursor: 'pointer',
 }
