@@ -13,9 +13,19 @@ type Project = {
   loe_budget: number | null
 }
 
+type ActivityItem = {
+  id: string
+  type: 'time_logged' | 'task_completed'
+  description: string
+  project_name: string | null
+  hours?: number
+  user_name: string
+  timestamp: string
+}
+
 export default function DashboardPage() {
   const supabase = createClient()
-  const router = useRouter()
+  const router   = useRouter()
 
   const [userName,       setUserName]       = useState('')
   const [activeProjects, setActiveProjects] = useState(0)
@@ -23,6 +33,7 @@ export default function DashboardPage() {
   const [hoursThisWeek,  setHoursThisWeek]  = useState(0)
   const [teamMembers,    setTeamMembers]    = useState(0)
   const [recentProjects, setRecentProjects] = useState<Project[]>([])
+  const [activity,       setActivity]       = useState<ActivityItem[]>([])
   const [loading,        setLoading]        = useState(true)
 
   useEffect(() => { loadDashboard() }, [])
@@ -91,11 +102,81 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(4)
 
+    // ── ACTIVITY FEED ──
+    // Recent time entries
+    const { data: recentTime } = await supabase
+      .from('time_entries')
+      .select('id, hours, description, entry_date, project_id, user_id, created_at')
+      .eq('workspace_id', wsId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    // Recently completed tasks
+    const { data: recentTasks } = await supabase
+      .from('tasks')
+      .select('id, title, project_id, updated_at')
+      .eq('workspace_id', wsId)
+      .eq('status', 'done')
+      .order('updated_at', { ascending: false })
+      .limit(10)
+
+    // Get project names for activity
+    const activityProjectIds = [
+      ...new Set([
+        ...(recentTime  || []).map(t => t.project_id),
+        ...(recentTasks || []).map(t => t.project_id),
+      ])
+    ].filter(Boolean)
+
+    const { data: activityProjects } = activityProjectIds.length > 0
+      ? await supabase.from('projects').select('id, name').in('id', activityProjectIds)
+      : { data: [] }
+
+    // Get user profiles for activity
+    const activityUserIds = [...new Set((recentTime || []).map(t => t.user_id))].filter(Boolean)
+    const { data: activityProfiles } = activityUserIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name').in('id', activityUserIds)
+      : { data: [] }
+
+    // Build activity items
+    const timeItems: ActivityItem[] = (recentTime || []).map(entry => {
+      const proj     = (activityProjects || []).find(p => p.id === entry.project_id)
+      const prof     = (activityProfiles || []).find(p => p.id === entry.user_id)
+      const firstName = prof?.full_name?.split(' ')[0] || 'Someone'
+      return {
+        id:           `time-${entry.id}`,
+        type:         'time_logged',
+        description:  entry.description || 'Logged time',
+        project_name: proj?.name || null,
+        hours:        entry.hours,
+        user_name:    firstName,
+        timestamp:    entry.created_at,
+      }
+    })
+
+    const taskItems: ActivityItem[] = (recentTasks || []).map(task => {
+      const proj = (activityProjects || []).find(p => p.id === task.project_id)
+      return {
+        id:           `task-${task.id}`,
+        type:         'task_completed',
+        description:  task.title,
+        project_name: proj?.name || null,
+        user_name:    'Team',
+        timestamp:    task.updated_at,
+      }
+    })
+
+    // Merge and sort by timestamp
+    const allActivity = [...timeItems, ...taskItems]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 12)
+
     setActiveProjects(projectCount || 0)
     setOpenTasks(taskCount || 0)
     setHoursThisWeek(totalHours)
     setTeamMembers(memberCount || 0)
     setRecentProjects((projects as Project[]) || [])
+    setActivity(allActivity)
     setLoading(false)
   }
 
@@ -107,14 +188,13 @@ export default function DashboardPage() {
   }
 
   function statusStyle(status: string): React.CSSProperties {
-    const map: Record<string, { bg: string; color: string; label: string }> = {
-      on_track:    { bg: '#dcfce7', color: '#16a34a', label: 'On Track' },
-      at_risk:     { bg: '#fef9c3', color: '#b45309', label: 'At Risk' },
-      over_budget: { bg: '#fee2e2', color: '#dc2626', label: 'Over Budget' },
-      completed:   { bg: '#f3f4f6', color: '#6b7280', label: 'Completed' },
+    const map: Record<string, { bg: string; color: string }> = {
+      on_track:    { bg: '#dcfce7', color: '#16a34a' },
+      at_risk:     { bg: '#fef9c3', color: '#b45309' },
+      over_budget: { bg: '#fee2e2', color: '#dc2626' },
+      completed:   { bg: '#f3f4f6', color: '#6b7280' },
     }
-    const s = map[status] || map.on_track
-    return { background: s.bg, color: s.color }
+    return map[status] || map.on_track
   }
 
   function statusLabel(status: string) {
@@ -123,6 +203,22 @@ export default function DashboardPage() {
       over_budget: 'Over Budget', completed: 'Completed',
     }
     return map[status] || status
+  }
+
+  function timeAgo(timestamp: string) {
+    const diff = Date.now() - new Date(timestamp).getTime()
+    const mins  = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days  = Math.floor(diff / 86400000)
+    if (mins < 60)  return `${mins}m ago`
+    if (hours < 24) return `${hours}h ago`
+    return `${days}d ago`
+  }
+
+  function activityIcon(type: ActivityItem['type']) {
+    if (type === 'time_logged')    return { icon: '◷', bg: '#ede9fe', color: '#5046e5' }
+    if (type === 'task_completed') return { icon: '✓', bg: '#dcfce7', color: '#16a34a' }
+    return { icon: '·', bg: '#f3f4f6', color: '#6b7280' }
   }
 
   const stats = [
@@ -142,7 +238,7 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
-        <div style={{ maxWidth: 900 }}>
+        <div style={{ maxWidth: 1100 }}>
 
           {/* Greeting */}
           <div style={{ marginBottom: 28 }}>
@@ -155,7 +251,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
             {stats.map(stat => (
               <div key={stat.label} style={{
                 background: 'white', borderRadius: 12,
@@ -167,76 +263,150 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* Recent projects */}
-          <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-            <div style={{
-              padding: '16px 24px', borderBottom: '1px solid #e5e7eb',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Recent Projects</span>
-              <button
-                onClick={() => router.push('/projects')}
-                style={{ fontSize: 12, color: '#5046e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-              >
-                View all
-              </button>
-            </div>
+          {/* Two column layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
 
-            {loading && (
-              <div style={{ padding: '40px 24px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                Loading...
-              </div>
-            )}
-
-            {!loading && recentProjects.length === 0 && (
-              <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>No projects yet</div>
+            {/* Recent projects */}
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{
+                padding: '16px 24px', borderBottom: '1px solid #e5e7eb',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Recent Projects</span>
                 <button
                   onClick={() => router.push('/projects')}
-                  style={{
-                    background: '#5046e5', color: 'white', border: 'none',
-                    borderRadius: 8, padding: '8px 16px', fontSize: 13,
-                    fontWeight: 600, cursor: 'pointer',
-                  }}
+                  style={{ fontSize: 12, color: '#5046e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                 >
-                  Create your first project
+                  View all
                 </button>
               </div>
-            )}
 
-            {!loading && recentProjects.length > 0 && (
-              <div>
-                {recentProjects.map((project, i) => (
-                  <div
-                    key={project.id}
-                    onClick={() => router.push(`/projects/${project.id}`)}
-                    style={{
-                      padding: '14px 24px',
-                      borderBottom: i < recentProjects.length - 1 ? '1px solid #f3f4f6' : 'none',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      cursor: 'pointer',
-                    }}
+              {loading && (
+                <div style={{ padding: '40px 24px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Loading...</div>
+              )}
+
+              {!loading && recentProjects.length === 0 && (
+                <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>No projects yet</div>
+                  <button
+                    onClick={() => router.push('/projects')}
+                    style={{ background: '#5046e5', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   >
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e' }}>{project.name}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      {project.due_date && (
-                        <span style={{ fontSize: 12, color: '#9ca3af' }}>
-                          Due {new Date(project.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                      <span style={{
-                        ...statusStyle(project.status),
-                        fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 20,
-                      }}>
-                        {statusLabel(project.status)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                    Create your first project
+                  </button>
+                </div>
+              )}
 
+              {!loading && recentProjects.length > 0 && recentProjects.map((project, i) => (
+                <div
+                  key={project.id}
+                  onClick={() => router.push(`/projects/${project.id}`)}
+                  style={{
+                    padding: '14px 24px',
+                    borderBottom: i < recentProjects.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#f9fafb' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'white' }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e' }}>{project.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    {project.due_date && (
+                      <span style={{ fontSize: 12, color: '#9ca3af' }}>
+                        Due {new Date(project.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                    <span style={{
+                      ...statusStyle(project.status),
+                      fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 20,
+                    }}>
+                      {statusLabel(project.status)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Activity feed */}
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+                <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Recent Activity</span>
+              </div>
+
+              {loading && (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Loading...</div>
+              )}
+
+              {!loading && activity.length === 0 && (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+                  No activity yet. Start logging time or completing tasks.
+                </div>
+              )}
+
+              {!loading && activity.length > 0 && (
+                <div style={{ padding: '8px 0' }}>
+                  {activity.map((item, i) => {
+                    const ic = activityIcon(item.type)
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: 'flex', gap: 12, padding: '10px 20px',
+                          borderBottom: i < activity.length - 1 ? '1px solid #f9fafb' : 'none',
+                        }}
+                      >
+                        {/* Icon */}
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                          background: ic.bg, color: ic.color,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 700, marginTop: 1,
+                        }}>
+                          {ic.icon}
+                        </div>
+
+                        {/* Content */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
+                            {item.type === 'time_logged' && (
+                              <>
+                                <strong>{item.user_name}</strong> logged{' '}
+                                <strong>{item.hours}h</strong>
+                                {item.project_name && (
+                                  <> on <span style={{ color: '#5046e5', fontWeight: 600 }}>{item.project_name}</span></>
+                                )}
+                                {item.description && item.description !== 'Logged time' && (
+                                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                                    {item.description}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            {item.type === 'task_completed' && (
+                              <>
+                                <strong>Task completed</strong>
+                                {item.project_name && (
+                                  <> on <span style={{ color: '#5046e5', fontWeight: 600 }}>{item.project_name}</span></>
+                                )}
+                                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                                  {item.description}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
+                            {timeAgo(item.timestamp)}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
       </div>
     </AppLayout>
