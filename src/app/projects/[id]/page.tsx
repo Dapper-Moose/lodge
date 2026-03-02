@@ -90,14 +90,14 @@ function EditProjectModal({ project, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const supabase = createClient()
-  const [name,      setName]      = useState(project.name)
-  const [desc,      setDesc]      = useState(project.description || '')
-  const [status,    setStatus]    = useState(project.status)
-  const [startDate, setStartDate] = useState(project.start_date || '')
-  const [dueDate,   setDueDate]   = useState(project.due_date || '')
-  const [budget,    setBudget]    = useState(project.loe_budget?.toString() || '')
-  const [error,     setError]     = useState('')
-  const [loading,   setLoading]   = useState(false)
+  const [name,       setName]       = useState(project.name)
+  const [desc,       setDesc]       = useState(project.description || '')
+  const [projStatus, setProjStatus] = useState(project.status)
+  const [startDate,  setStartDate]  = useState(project.start_date || '')
+  const [dueDate,    setDueDate]    = useState(project.due_date || '')
+  const [budget,     setBudget]     = useState(project.loe_budget?.toString() || '')
+  const [error,      setError]      = useState('')
+  const [loading,    setLoading]    = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -106,11 +106,11 @@ function EditProjectModal({ project, onClose, onSaved }: {
 
     const { error } = await supabase.from('projects').update({
       name,
-      description:  desc      || null,
-      status,
-      start_date:   startDate || null,
-      due_date:     dueDate   || null,
-      loe_budget:   budget    ? parseFloat(budget) : null,
+      description: desc      || null,
+      status:      projStatus,
+      start_date:  startDate || null,
+      due_date:    dueDate   || null,
+      loe_budget:  budget    ? parseFloat(budget) : null,
     }).eq('id', project.id)
 
     if (error) { setError(error.message); setLoading(false); return }
@@ -147,7 +147,7 @@ function EditProjectModal({ project, onClose, onSaved }: {
             </div>
             <div>
               <label style={labelStyle}>Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
+              <select value={projStatus} onChange={e => setProjStatus(e.target.value)} style={inputStyle}>
                 <option value="on_track">On Track</option>
                 <option value="at_risk">At Risk</option>
                 <option value="over_budget">Over Budget</option>
@@ -192,12 +192,13 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const supabase = createClient()
-  const [title,    setTitle]    = useState('')
-  const [priority, setPriority] = useState('medium')
-  const [dueDate,  setDueDate]  = useState('')
-  const [estHours, setEstHours] = useState('')
-  const [error,    setError]    = useState('')
-  const [loading,  setLoading]  = useState(false)
+  const [title,      setTitle]      = useState('')
+  const [priority,   setPriority]   = useState('medium')
+  const [taskStatus, setTaskStatus] = useState('todo')
+  const [dueDate,    setDueDate]    = useState('')
+  const [estHours,   setEstHours]   = useState('')
+  const [error,      setError]      = useState('')
+  const [loading,    setLoading]    = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -205,13 +206,13 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
     setError('')
 
     const { error } = await supabase.from('tasks').insert({
-      workspace_id:     workspaceId,
-      project_id:       projectId,
+      workspace_id:    workspaceId,
+      project_id:      projectId,
       title,
       priority,
-      due_date:         dueDate   || null,
-      estimated_hours:  estHours  ? parseFloat(estHours) : null,
-      status:           'todo',
+      status:          taskStatus,
+      due_date:        dueDate  || null,
+      estimated_hours: estHours ? parseFloat(estHours) : null,
     })
 
     if (error) { setError(error.message); setLoading(false); return }
@@ -238,13 +239,22 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
               <label style={labelStyle}>Task Title *</label>
               <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Write copy for homepage" style={inputStyle} />
             </div>
-            <div>
-              <label style={labelStyle}>Priority</label>
-              <select value={priority} onChange={e => setPriority(e.target.value)} style={inputStyle}>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Status</label>
+                <select value={taskStatus} onChange={e => setTaskStatus(e.target.value)} style={inputStyle}>
+                  <option value="todo">To Do</option>
+                  <option value="in_progress">In Progress</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Priority</label>
+                <select value={priority} onChange={e => setPriority(e.target.value)} style={inputStyle}>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
@@ -272,9 +282,9 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
 
 // ─── MAIN PAGE ────────────────────────────────────────────
 export default function ProjectDetailPage() {
-  const supabase = createClient()
-  const params   = useParams()
-  const router   = useRouter()
+  const supabase  = createClient()
+  const params    = useParams()
+  const router    = useRouter()
   const projectId = params.id as string
 
   const [project,     setProject]     = useState<Project | null>(null)
@@ -284,6 +294,7 @@ export default function ProjectDetailPage() {
   const [loading,     setLoading]     = useState(true)
   const [showEdit,    setShowEdit]    = useState(false)
   const [showAddTask, setShowAddTask] = useState(false)
+  const [groupTasks,  setGroupTasks]  = useState(true)
 
   useEffect(() => { loadProject() }, [projectId])
 
@@ -333,6 +344,63 @@ export default function ProjectDetailPage() {
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t))
   }
 
+  function renderTask(task: Task, i: number, total: number) {
+    const pi = priorityInfo(task.priority)
+    const isDone = task.status === 'done'
+    const isOverdue = task.due_date && !isDone &&
+      new Date(task.due_date + 'T12:00:00') < new Date()
+
+    return (
+      <div key={task.id} style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 20px',
+        borderBottom: i < total - 1 ? '1px solid #f3f4f6' : '1px solid #e5e7eb',
+        opacity: isDone ? 0.6 : 1,
+      }}>
+        <div
+          onClick={() => toggleTask(task)}
+          style={{
+            width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+            border: isDone ? 'none' : '1.5px solid #d1d5db',
+            background: isDone ? '#16a34a' : 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: 10, color: 'white',
+          }}
+        >
+          {isDone && '✓'}
+        </div>
+        <div style={{
+          flex: 1, fontSize: 13, fontWeight: 500,
+          color: isDone ? '#9ca3af' : '#1a1a2e',
+          textDecoration: isDone ? 'line-through' : 'none',
+        }}>
+          {task.title}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {task.due_date && (
+            <span style={{
+              fontSize: 11,
+              color: isOverdue ? '#dc2626' : '#9ca3af',
+              fontWeight: isOverdue ? 600 : 400,
+            }}>
+              {isOverdue ? '⚠ ' : ''}
+              {new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+          {task.estimated_hours && (
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>{task.estimated_hours}h est.</span>
+          )}
+          <span style={{
+            fontSize: 11, fontWeight: 600, color: pi.color,
+            background: '#f3f4f6', padding: '2px 7px', borderRadius: 20,
+          }}>
+            {pi.label}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <AppLayout>
@@ -353,15 +421,28 @@ export default function ProjectDetailPage() {
     )
   }
 
-  const clientName    = getClientName(project.clients)
-  const si            = statusInfo(project.status)
-  const doneTasks     = tasks.filter(t => t.status === 'done').length
-  const totalTasks    = tasks.length
-  const taskPct       = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
-  const totalLogged   = timeEntries.reduce((sum, e) => sum + e.hours, 0)
-  const budget        = project.loe_budget || 0
-  const budgetPct     = budget > 0 ? Math.min(Math.round((totalLogged / budget) * 100), 100) : 0
-  const budgetColor   = budgetPct >= 90 ? '#dc2626' : budgetPct >= 70 ? '#d97706' : '#16a34a'
+  const clientName  = getClientName(project.clients)
+  const si          = statusInfo(project.status)
+  const doneTasks   = tasks.filter(t => t.status === 'done').length
+  const totalTasks  = tasks.length
+  const taskPct     = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+  const totalLogged = timeEntries.reduce((sum, e) => sum + e.hours, 0)
+  const budget      = project.loe_budget || 0
+  const budgetPct   = budget > 0 ? Math.min(Math.round((totalLogged / budget) * 100), 100) : 0
+  const budgetColor = budgetPct >= 90 ? '#dc2626' : budgetPct >= 70 ? '#d97706' : '#16a34a'
+
+  const taskGroups = [
+    { label: 'In Progress', items: tasks.filter(t => t.status === 'in_progress') },
+    { label: 'To Do',       items: tasks.filter(t => t.status === 'todo') },
+    { label: 'Completed',   items: tasks.filter(t => t.status === 'done') },
+  ].filter(g => g.items.length > 0)
+
+  const sortedByDueDate = [...tasks].sort((a, b) => {
+    if (!a.due_date && !b.due_date) return 0
+    if (!a.due_date) return 1
+    if (!b.due_date) return -1
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+  })
 
   return (
     <AppLayout>
@@ -378,18 +459,18 @@ export default function ProjectDetailPage() {
           >
             Projects
           </span>
-          <span style={{ color: '#d1d5db' }}>›</span>
+          <span style={{ color: '#d1d5db' }}>{'>'}</span>
           <span style={{ fontSize: 13, color: '#1a1a2e', fontWeight: 600 }}>{project.name}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ ...si, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: si.bg, color: si.color }}>
             {si.label}
           </span>
           <button onClick={() => setShowEdit(true)} style={ghostBtnStyle}>Edit Project</button>
         </div>
       </div>
 
-      {/* Body — two column layout */}
+      {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, maxWidth: 1100, alignItems: 'start' }}>
 
@@ -407,10 +488,10 @@ export default function ProjectDetailPage() {
             {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
               {[
-                { label: 'Start Date',   value: project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
-                { label: 'Due Date',     value: project.due_date   ? new Date(project.due_date   + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
-                { label: 'LOE Budget',   value: budget ? `${budget}h` : '—' },
-                { label: 'Tasks',        value: `${doneTasks} / ${totalTasks}` },
+                { label: 'Start Date', value: project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                { label: 'Due Date',   value: project.due_date   ? new Date(project.due_date   + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                { label: 'LOE Budget', value: budget ? `${budget}h` : '—' },
+                { label: 'Tasks',      value: `${doneTasks} / ${totalTasks}` },
               ].map(stat => (
                 <div key={stat.label} style={{ background: 'white', borderRadius: 10, border: '1px solid #e5e7eb', padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 4 }}>{stat.label}</div>
@@ -439,7 +520,20 @@ export default function ProjectDetailPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}>
                 <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Tasks</span>
-                <button onClick={() => setShowAddTask(true)} style={primaryBtnStyle}>+ Add Task</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => setGroupTasks(g => !g)}
+                    style={{
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      background: groupTasks ? '#ede9fe' : '#f3f4f6',
+                      color: groupTasks ? '#5046e5' : '#6b7280',
+                      border: 'none', borderRadius: 6, padding: '5px 10px',
+                    }}
+                  >
+                    {groupTasks ? 'Grouped' : 'By Due Date'}
+                  </button>
+                  <button onClick={() => setShowAddTask(true)} style={primaryBtnStyle}>+ Add Task</button>
+                </div>
               </div>
 
               {tasks.length === 0 && (
@@ -448,63 +542,34 @@ export default function ProjectDetailPage() {
                 </div>
               )}
 
-              {tasks.map((task, i) => {
-                const pi = priorityInfo(task.priority)
-                const isDone = task.status === 'done'
-                return (
-                  <div key={task.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '12px 20px',
-                    borderBottom: i < tasks.length - 1 ? '1px solid #f3f4f6' : 'none',
+              {/* Grouped view */}
+              {groupTasks && taskGroups.map(group => (
+                <div key={group.label}>
+                  <div style={{
+                    padding: '8px 20px', fontSize: 11, fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    color: '#9ca3af', background: '#f9fafb',
+                    borderBottom: '1px solid #f3f4f6',
                   }}>
-                    {/* Checkbox */}
-                    <div
-                      onClick={() => toggleTask(task)}
-                      style={{
-                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                        border: isDone ? 'none' : '1.5px solid #d1d5db',
-                        background: isDone ? '#16a34a' : 'white',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', fontSize: 10, color: 'white',
-                      }}
-                    >
-                      {isDone && '✓'}
-                    </div>
-
-                    {/* Title */}
-                    <div style={{ flex: 1, fontSize: 13, fontWeight: 500, color: isDone ? '#9ca3af' : '#1a1a2e', textDecoration: isDone ? 'line-through' : 'none' }}>
-                      {task.title}
-                    </div>
-
-                    {/* Meta */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {task.due_date && (
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                          {new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                      {task.estimated_hours && (
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{task.estimated_hours}h</span>
-                      )}
-                      <span style={{ fontSize: 11, fontWeight: 600, color: pi.color, background: '#f3f4f6', padding: '2px 7px', borderRadius: 20 }}>
-                        {pi.label}
-                      </span>
-                    </div>
+                    {group.label} — {group.items.length}
                   </div>
-                )
-              })}
+                  {group.items.map((task, i) => renderTask(task, i, group.items.length))}
+                </div>
+              ))}
+
+              {/* By due date view */}
+              {!groupTasks && sortedByDueDate.map((task, i) => renderTask(task, i, sortedByDueDate.length))}
             </div>
           </div>
 
           {/* RIGHT SIDEBAR */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* LOE Budget card */}
+            {/* LOE Budget */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
                 Hours Budget
               </div>
-
               {budget > 0 ? (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -512,7 +577,7 @@ export default function ProjectDetailPage() {
                     <span style={{ fontSize: 12, color: '#9ca3af' }}>of {budget}h</span>
                   </div>
                   <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-                    <div style={{ height: '100%', width: `${budgetPct}%`, background: budgetColor, borderRadius: 4, transition: 'width 0.3s ease' }} />
+                    <div style={{ height: '100%', width: `${budgetPct}%`, background: budgetColor, borderRadius: 4 }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af' }}>
                     <span style={{ color: budgetColor, fontWeight: 600 }}>{budgetPct}% used</span>
@@ -529,7 +594,6 @@ export default function ProjectDetailPage() {
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
                 Recent Time Entries
               </div>
-
               {timeEntries.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9ca3af' }}>No time logged yet.</div>
               ) : (
