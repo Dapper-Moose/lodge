@@ -32,6 +32,7 @@ type TimeEntry = {
   entry_date: string
   description: string | null
   user_id: string
+  user_name?: string
 }
 
 const inputStyle: React.CSSProperties = {
@@ -287,14 +288,16 @@ export default function ProjectDetailPage() {
   const router    = useRouter()
   const projectId = params.id as string
 
-  const [project,     setProject]     = useState<Project | null>(null)
-  const [tasks,       setTasks]       = useState<Task[]>([])
-  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
-  const [workspaceId, setWorkspaceId] = useState('')
-  const [loading,     setLoading]     = useState(true)
-  const [showEdit,    setShowEdit]    = useState(false)
-  const [showAddTask, setShowAddTask] = useState(false)
-  const [groupTasks,  setGroupTasks]  = useState(true)
+  const [project,      setProject]      = useState<Project | null>(null)
+  const [tasks,        setTasks]        = useState<Task[]>([])
+  const [timeEntries,  setTimeEntries]  = useState<TimeEntry[]>([])
+  const [allEntries,   setAllEntries]   = useState<TimeEntry[]>([])
+  const [workspaceId,  setWorkspaceId]  = useState('')
+  const [loading,      setLoading]      = useState(true)
+  const [showEdit,     setShowEdit]     = useState(false)
+  const [showAddTask,  setShowAddTask]  = useState(false)
+  const [groupTasks,   setGroupTasks]   = useState(true)
+  const [activeTab,    setActiveTab]    = useState<'tasks' | 'timelog'>('tasks')
 
   useEffect(() => { loadProject() }, [projectId])
 
@@ -325,16 +328,36 @@ export default function ProjectDetailPage() {
       .eq('project_id', projectId)
       .order('created_at', { ascending: true })
 
-    const { data: timeData } = await supabase
+    // Recent entries for sidebar (limit 5)
+    const { data: recentTimeData } = await supabase
       .from('time_entries')
       .select('id, hours, entry_date, description, user_id')
       .eq('project_id', projectId)
       .order('entry_date', { ascending: false })
       .limit(5)
 
+    // All entries for time log tab
+    const { data: allTimeData } = await supabase
+      .from('time_entries')
+      .select('id, hours, entry_date, description, user_id')
+      .eq('project_id', projectId)
+      .order('entry_date', { ascending: false })
+
+    // Get user names for time entries
+    const allUserIds = [...new Set((allTimeData || []).map(e => e.user_id))].filter(Boolean)
+    const { data: profiles } = allUserIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name').in('id', allUserIds)
+      : { data: [] }
+
+    const enrichEntries = (entries: any[]) => entries.map(e => ({
+      ...e,
+      user_name: profiles?.find(p => p.id === e.user_id)?.full_name || 'Unknown',
+    }))
+
     setProject(proj as unknown as Project)
     setTasks((taskData as Task[]) || [])
-    setTimeEntries((timeData as TimeEntry[]) || [])
+    setTimeEntries(enrichEntries(recentTimeData || []))
+    setAllEntries(enrichEntries(allTimeData || []))
     setLoading(false)
   }
 
@@ -426,7 +449,7 @@ export default function ProjectDetailPage() {
   const doneTasks   = tasks.filter(t => t.status === 'done').length
   const totalTasks  = tasks.length
   const taskPct     = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
-  const totalLogged = timeEntries.reduce((sum, e) => sum + e.hours, 0)
+  const totalLogged = allEntries.reduce((sum, e) => sum + e.hours, 0)
   const budget      = project.loe_budget || 0
   const budgetPct   = budget > 0 ? Math.min(Math.round((totalLogged / budget) * 100), 100) : 0
   const budgetColor = budgetPct >= 90 ? '#dc2626' : budgetPct >= 70 ? '#d97706' : '#16a34a'
@@ -443,6 +466,15 @@ export default function ProjectDetailPage() {
     if (!b.due_date) return -1
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
   })
+
+  // Group time entries by date for the time log tab
+  const entriesByDate: Record<string, TimeEntry[]> = {}
+  allEntries.forEach(entry => {
+    const dateKey = entry.entry_date
+    if (!entriesByDate[dateKey]) entriesByDate[dateKey] = []
+    entriesByDate[dateKey].push(entry)
+  })
+  const sortedDates = Object.keys(entriesByDate).sort((a, b) => b.localeCompare(a))
 
   return (
     <AppLayout>
@@ -513,53 +545,189 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            {/* Tasks section */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <div style={{
-                padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              }}>
-                <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>Tasks</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    onClick={() => setGroupTasks(g => !g)}
-                    style={{
-                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      background: groupTasks ? '#ede9fe' : '#f3f4f6',
-                      color: groupTasks ? '#5046e5' : '#6b7280',
-                      border: 'none', borderRadius: 6, padding: '5px 10px',
-                    }}
-                  >
-                    {groupTasks ? 'Grouped' : 'By Due Date'}
-                  </button>
-                  <button onClick={() => setShowAddTask(true)} style={primaryBtnStyle}>+ Add Task</button>
-                </div>
-              </div>
-
-              {tasks.length === 0 && (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
-                  No tasks yet. Add your first task to get started.
-                </div>
-              )}
-
-              {/* Grouped view */}
-              {groupTasks && taskGroups.map(group => (
-                <div key={group.label}>
-                  <div style={{
-                    padding: '8px 20px', fontSize: 11, fontWeight: 700,
-                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                    color: '#9ca3af', background: '#f9fafb',
-                    borderBottom: '1px solid #f3f4f6',
-                  }}>
-                    {group.label} — {group.items.length}
-                  </div>
-                  {group.items.map((task, i) => renderTask(task, i, group.items.length))}
-                </div>
+            {/* Tab bar */}
+            <div style={{
+              display: 'flex', gap: 4, marginBottom: 0,
+              background: 'white', borderRadius: '12px 12px 0 0',
+              border: '1px solid #e5e7eb', borderBottom: 'none',
+              padding: '12px 16px 0',
+            }}>
+              {(['tasks', 'timelog'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    background: 'none', border: 'none', padding: '6px 14px',
+                    borderBottom: activeTab === tab ? '2px solid #5046e5' : '2px solid transparent',
+                    color: activeTab === tab ? '#5046e5' : '#6b7280',
+                    marginBottom: -1,
+                  }}
+                >
+                  {tab === 'tasks' ? `Tasks (${totalTasks})` : `Time Log (${allEntries.length})`}
+                </button>
               ))}
-
-              {/* By due date view */}
-              {!groupTasks && sortedByDueDate.map((task, i) => renderTask(task, i, sortedByDueDate.length))}
             </div>
+
+            {/* ── TASKS TAB ── */}
+            {activeTab === 'tasks' && (
+              <div style={{ background: 'white', borderRadius: '0 0 12px 12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                <div style={{
+                  padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#6b7280' }}>
+                    {doneTasks} of {totalTasks} complete
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={() => setGroupTasks(g => !g)}
+                      style={{
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        background: groupTasks ? '#ede9fe' : '#f3f4f6',
+                        color: groupTasks ? '#5046e5' : '#6b7280',
+                        border: 'none', borderRadius: 6, padding: '5px 10px',
+                      }}
+                    >
+                      {groupTasks ? 'Grouped' : 'By Due Date'}
+                    </button>
+                    <button onClick={() => setShowAddTask(true)} style={primaryBtnStyle}>+ Add Task</button>
+                  </div>
+                </div>
+
+                {tasks.length === 0 && (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                    No tasks yet. Add your first task to get started.
+                  </div>
+                )}
+
+                {groupTasks && taskGroups.map(group => (
+                  <div key={group.label}>
+                    <div style={{
+                      padding: '8px 20px', fontSize: 11, fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      color: '#9ca3af', background: '#f9fafb',
+                      borderBottom: '1px solid #f3f4f6',
+                    }}>
+                      {group.label} — {group.items.length}
+                    </div>
+                    {group.items.map((task, i) => renderTask(task, i, group.items.length))}
+                  </div>
+                ))}
+
+                {!groupTasks && sortedByDueDate.map((task, i) => renderTask(task, i, sortedByDueDate.length))}
+              </div>
+            )}
+
+            {/* ── TIME LOG TAB ── */}
+            {activeTab === 'timelog' && (
+              <div style={{ background: 'white', borderRadius: '0 0 12px 12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                {/* Summary row */}
+                <div style={{
+                  padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}>
+                  <div style={{ display: 'flex', gap: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Total Logged</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: budgetColor }}>{totalLogged.toFixed(1)}h</div>
+                    </div>
+                    {budget > 0 && (
+                      <>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Budget</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{budget}h</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Remaining</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: (budget - totalLogged) < 0 ? '#dc2626' : '#1a1a2e' }}>
+                            {(budget - totalLogged).toFixed(1)}h
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Entries</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{allEntries.length}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {allEntries.length === 0 && (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                    No time logged yet on this project.
+                  </div>
+                )}
+
+                {/* Entries grouped by date */}
+                {sortedDates.map(dateKey => {
+                  const dayEntries  = entriesByDate[dateKey]
+                  const dayTotal    = dayEntries.reduce((sum, e) => sum + e.hours, 0)
+                  const displayDate = new Date(dateKey + 'T12:00:00').toLocaleDateString('en-US', {
+                    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+                  })
+
+                  return (
+                    <div key={dateKey}>
+                      {/* Date header */}
+                      <div style={{
+                        padding: '8px 20px', fontSize: 11, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        color: '#9ca3af', background: '#f9fafb',
+                        borderBottom: '1px solid #f3f4f6',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      }}>
+                        <span>{displayDate}</span>
+                        <span style={{ color: '#5046e5' }}>{dayTotal.toFixed(1)}h</span>
+                      </div>
+
+                      {/* Entries for this date */}
+                      {dayEntries.map((entry, i) => {
+                        const initials = (entry.user_name || 'U')
+                          .split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                        const colors = ['#5046e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444']
+                        const avatarColor = colors[(entry.user_name || '').charCodeAt(0) % colors.length]
+
+                        return (
+                          <div key={entry.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 14,
+                            padding: '12px 20px',
+                            borderBottom: i < dayEntries.length - 1 ? '1px solid #f9fafb' : '1px solid #e5e7eb',
+                          }}>
+                            {/* Avatar */}
+                            <div style={{
+                              width: 30, height: 30, borderRadius: '50%',
+                              background: avatarColor, color: 'white',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 11, fontWeight: 700, flexShrink: 0,
+                            }}>
+                              {initials}
+                            </div>
+
+                            {/* Details */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>
+                                {entry.user_name || 'Unknown'}
+                              </div>
+                              {entry.description && (
+                                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                                  {entry.description}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Hours */}
+                            <div style={{ fontSize: 16, fontWeight: 700, color: '#5046e5', flexShrink: 0 }}>
+                              {entry.hours}h
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* RIGHT SIDEBAR */}
@@ -591,8 +759,20 @@ export default function ProjectDetailPage() {
 
             {/* Recent time entries */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
-                Recent Time Entries
+              <div style={{
+                fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span>Recent Time</span>
+                {allEntries.length > 5 && (
+                  <button
+                    onClick={() => setActiveTab('timelog')}
+                    style={{ fontSize: 11, color: '#5046e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    View all
+                  </button>
+                )}
               </div>
               {timeEntries.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9ca3af' }}>No time logged yet.</div>
