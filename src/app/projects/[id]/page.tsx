@@ -178,93 +178,6 @@ function EditProjectModal({ project, onClose, onSaved }: {
   )
 }
 
-// ─── ADD TASK MODAL ───────────────────────────────────────
-function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
-  projectId: string
-  workspaceId: string
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const supabase = createClient()
-  const [title,      setTitle]      = useState('')
-  const [priority,   setPriority]   = useState('medium')
-  const [taskStatus, setTaskStatus] = useState('todo')
-  const [dueDate,    setDueDate]    = useState('')
-  const [estHours,   setEstHours]   = useState('')
-  const [error,      setError]      = useState('')
-  const [loading,    setLoading]    = useState(false)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.from('tasks').insert({
-      workspace_id:    workspaceId,
-      project_id:      projectId,
-      title,
-      priority,
-      status:          taskStatus,
-      due_date:        dueDate  || null,
-      estimated_hours: estHours ? parseFloat(estHours) : null,
-    })
-    if (error) { setError(error.message); setLoading(false); return }
-    onSaved()
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
-      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>Add Task</div>
-            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Add a new task to this project</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af', padding: 4 }}>X</button>
-        </div>
-        <form onSubmit={handleSubmit} style={{ padding: 24 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={labelStyle}>Task Title *</label>
-              <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Write copy for homepage" style={inputStyle} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={labelStyle}>Status</label>
-                <select value={taskStatus} onChange={e => setTaskStatus(e.target.value)} style={inputStyle}>
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Priority</label>
-                <select value={priority} onChange={e => setPriority(e.target.value)} style={inputStyle}>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={labelStyle}>Due Date</label>
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Estimated Hours</label>
-                <input type="number" min="0" step="0.5" value={estHours} onChange={e => setEstHours(e.target.value)} placeholder="e.g. 4" style={inputStyle} />
-              </div>
-            </div>
-            {error && <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>{error}</div>}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button type="button" onClick={onClose} style={ghostBtnStyle}>Cancel</button>
-              <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading ? 'Saving...' : 'Add Task'}</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
 
 
 // ─── MAIN PAGE ────────────────────────────────────────────
@@ -280,9 +193,8 @@ export default function ProjectDetailPage() {
   const [allEntries,   setAllEntries]   = useState<TimeEntry[]>([])
   const [workspaceId,  setWorkspaceId]  = useState('')
   const [loading,      setLoading]      = useState(true)
-  const [showEdit,     setShowEdit]     = useState(false)
-  const [showAddTask,  setShowAddTask]  = useState(false)
-  const [editingTask,  setEditingTask]  = useState<Task | null>(null)
+  const [showEdit,      setShowEdit]      = useState(false)
+  const [creatingTask,  setCreatingTask]  = useState(false)
   const [groupTasks,   setGroupTasks]   = useState(true)
   const [activeTab,    setActiveTab]    = useState<'tasks' | 'timelog'>('tasks')
 
@@ -343,6 +255,19 @@ export default function ProjectDetailPage() {
     setTimeEntries(enrichEntries(recentTimeData || []))
     setAllEntries(enrichEntries(allTimeData || []))
     setLoading(false)
+  }
+
+  async function createNewTask() {
+    setCreatingTask(true)
+    const { data } = await supabase.from('tasks').insert({
+      workspace_id: workspaceId,
+      project_id:   projectId,
+      title:        'New Task',
+      status:       'todo',
+      priority:     'medium',
+    }).select().single()
+    if (data) router.push(`/projects/${projectId}/tasks/${data.id}`)
+    setCreatingTask(false)
   }
 
   async function toggleTask(task: Task) {
@@ -582,7 +507,7 @@ export default function ProjectDetailPage() {
                     >
                       {groupTasks ? 'Grouped' : 'By Due Date'}
                     </button>
-                    <button onClick={() => setShowAddTask(true)} style={primaryBtnStyle}>+ Add Task</button>
+                    <button onClick={createNewTask} disabled={creatingTask} style={primaryBtnStyle}>{creatingTask ? 'Creating...' : '+ Add Task'}</button>
                   </div>
                 </div>
 
@@ -784,16 +709,7 @@ export default function ProjectDetailPage() {
         />
       )}
 
-      {showAddTask && (
-        <AddTaskModal
-          projectId={projectId}
-          workspaceId={workspaceId}
-          onClose={() => setShowAddTask(false)}
-          onSaved={() => { setShowAddTask(false); loadProject() }}
-        />
-      )}
 
-      
     </AppLayout>
   )
 }

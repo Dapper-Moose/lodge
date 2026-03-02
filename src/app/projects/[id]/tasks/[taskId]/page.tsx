@@ -348,7 +348,7 @@ export default function TaskDetailPage() {
   const [showLogTime,     setShowLogTime]     = useState(false)
 
   // View / Edit mode
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<'view' | 'edit'>('edit')
 
   // Editable fields
   const [title,       setTitle]       = useState('')
