@@ -5,11 +5,12 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
 const navItems = [
-  { label: 'Dashboard',     href: '/dashboard', icon: '▦' },
-  { label: 'Projects',      href: '/projects',  icon: '◫' },
-  { label: 'Time Tracking', href: '/time',      icon: '◷' },
-  { label: 'Team',          href: '/team',      icon: '◉' },
-  { label: 'Clients',       href: '/clients',   icon: '◌' },
+  { label: 'Dashboard',     href: '/dashboard',  icon: '▦' },
+  { label: 'My Tasks',      href: '/my-tasks',   icon: '✓' },
+  { label: 'Projects',      href: '/projects',   icon: '◫' },
+  { label: 'Time Tracking', href: '/time',       icon: '◷' },
+  { label: 'Team',          href: '/team',       icon: '◉' },
+  { label: 'Clients',       href: '/clients',    icon: '◌' },
 ]
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -67,15 +68,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* ── SIDEBAR ── */}
       <div style={{
-        width: sidebarW,
-        minWidth: sidebarW,
-        maxWidth: sidebarW,
-        height: '100vh',
-        background: '#1a1a2e',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        flexShrink: 0,
+        width: sidebarW, minWidth: sidebarW, maxWidth: sidebarW,
+        height: '100vh', background: '#1a1a2e',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', flexShrink: 0,
       }}>
 
         {/* Workspace */}
@@ -98,7 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
           {navItems.map(item => {
-            const active = pathname.startsWith(item.href)
+            const active = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <button
                 key={item.href}

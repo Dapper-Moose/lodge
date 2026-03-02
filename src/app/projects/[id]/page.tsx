@@ -24,6 +24,7 @@ type Task = {
   priority: string | null
   due_date: string | null
   estimated_hours: number | null
+  notes: string | null
 }
 
 type TimeEntry = {
@@ -55,6 +56,12 @@ const primaryBtnStyle: React.CSSProperties = {
 
 const ghostBtnStyle: React.CSSProperties = {
   background: 'white', color: '#374151', border: '1px solid #d1d5db',
+  borderRadius: 8, padding: '8px 16px', fontSize: 13,
+  fontWeight: 600, cursor: 'pointer',
+}
+
+const dangerBtnStyle: React.CSSProperties = {
+  background: 'white', color: '#dc2626', border: '1px solid #fca5a5',
   borderRadius: 8, padding: '8px 16px', fontSize: 13,
   fontWeight: 600, cursor: 'pointer',
 }
@@ -104,7 +111,6 @@ function EditProjectModal({ project, onClose, onSaved }: {
     e.preventDefault()
     setLoading(true)
     setError('')
-
     const { error } = await supabase.from('projects').update({
       name,
       description: desc      || null,
@@ -113,22 +119,13 @@ function EditProjectModal({ project, onClose, onSaved }: {
       due_date:    dueDate   || null,
       loe_budget:  budget    ? parseFloat(budget) : null,
     }).eq('id', project.id)
-
     if (error) { setError(error.message); setLoading(false); return }
     onSaved()
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 100, padding: 20,
-    }}>
-      <div style={{
-        background: 'white', borderRadius: 16, width: '100%', maxWidth: 500,
-        maxHeight: '90vh', overflowY: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-      }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>Edit Project</div>
@@ -169,11 +166,7 @@ function EditProjectModal({ project, onClose, onSaved }: {
               <label style={labelStyle}>LOE Budget (hours)</label>
               <input type="number" min="0" step="0.5" value={budget} onChange={e => setBudget(e.target.value)} placeholder="e.g. 100" style={inputStyle} />
             </div>
-            {error && (
-              <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>
-                {error}
-              </div>
-            )}
+            {error && <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>{error}</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button type="button" onClick={onClose} style={ghostBtnStyle}>Cancel</button>
               <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading ? 'Saving...' : 'Save Changes'}</button>
@@ -205,7 +198,6 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
     e.preventDefault()
     setLoading(true)
     setError('')
-
     const { error } = await supabase.from('tasks').insert({
       workspace_id:    workspaceId,
       project_id:      projectId,
@@ -215,17 +207,12 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
       due_date:        dueDate  || null,
       estimated_hours: estHours ? parseFloat(estHours) : null,
     })
-
     if (error) { setError(error.message); setLoading(false); return }
     onSaved()
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 100, padding: 20,
-    }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -267,9 +254,7 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
                 <input type="number" min="0" step="0.5" value={estHours} onChange={e => setEstHours(e.target.value)} placeholder="e.g. 4" style={inputStyle} />
               </div>
             </div>
-            {error && (
-              <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>{error}</div>
-            )}
+            {error && <div style={{ fontSize: 13, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>{error}</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button type="button" onClick={onClose} style={ghostBtnStyle}>Cancel</button>
               <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading ? 'Saving...' : 'Add Task'}</button>
@@ -280,6 +265,7 @@ function AddTaskModal({ projectId, workspaceId, onClose, onSaved }: {
     </div>
   )
 }
+
 
 // ─── MAIN PAGE ────────────────────────────────────────────
 export default function ProjectDetailPage() {
@@ -296,6 +282,7 @@ export default function ProjectDetailPage() {
   const [loading,      setLoading]      = useState(true)
   const [showEdit,     setShowEdit]     = useState(false)
   const [showAddTask,  setShowAddTask]  = useState(false)
+  const [editingTask,  setEditingTask]  = useState<Task | null>(null)
   const [groupTasks,   setGroupTasks]   = useState(true)
   const [activeTab,    setActiveTab]    = useState<'tasks' | 'timelog'>('tasks')
 
@@ -324,11 +311,10 @@ export default function ProjectDetailPage() {
 
     const { data: taskData } = await supabase
       .from('tasks')
-      .select('id, title, status, priority, due_date, estimated_hours')
+      .select('id, title, status, priority, due_date, estimated_hours, notes')
       .eq('project_id', projectId)
       .order('created_at', { ascending: true })
 
-    // Recent entries for sidebar (limit 5)
     const { data: recentTimeData } = await supabase
       .from('time_entries')
       .select('id, hours, entry_date, description, user_id')
@@ -336,14 +322,12 @@ export default function ProjectDetailPage() {
       .order('entry_date', { ascending: false })
       .limit(5)
 
-    // All entries for time log tab
     const { data: allTimeData } = await supabase
       .from('time_entries')
       .select('id, hours, entry_date, description, user_id')
       .eq('project_id', projectId)
       .order('entry_date', { ascending: false })
 
-    // Get user names for time entries
     const allUserIds = [...new Set((allTimeData || []).map(e => e.user_id))].filter(Boolean)
     const { data: profiles } = allUserIds.length > 0
       ? await supabase.from('profiles').select('id, full_name').in('id', allUserIds)
@@ -351,7 +335,7 @@ export default function ProjectDetailPage() {
 
     const enrichEntries = (entries: any[]) => entries.map(e => ({
       ...e,
-      user_name: profiles?.find(p => p.id === e.user_id)?.full_name || 'Unknown',
+      user_name: profiles?.find((p: any) => p.id === e.user_id)?.full_name || 'Unknown',
     }))
 
     setProject(proj as unknown as Project)
@@ -374,14 +358,22 @@ export default function ProjectDetailPage() {
       new Date(task.due_date + 'T12:00:00') < new Date()
 
     return (
-      <div key={task.id} style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '12px 20px',
-        borderBottom: i < total - 1 ? '1px solid #f3f4f6' : '1px solid #e5e7eb',
-        opacity: isDone ? 0.6 : 1,
-      }}>
+      <div
+        key={task.id}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '12px 20px',
+          borderBottom: i < total - 1 ? '1px solid #f3f4f6' : '1px solid #e5e7eb',
+          opacity: isDone ? 0.6 : 1,
+          cursor: 'pointer',
+        }}
+        onClick={() => router.push(`/projects/${projectId}/tasks/${task.id}`)}
+        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#f9fafb' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'white' }}
+      >
+        {/* Checkbox — stop propagation so clicking it doesn't open the modal */}
         <div
-          onClick={() => toggleTask(task)}
+          onClick={e => { e.stopPropagation(); toggleTask(task) }}
           style={{
             width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
             border: isDone ? 'none' : '1.5px solid #d1d5db',
@@ -392,13 +384,20 @@ export default function ProjectDetailPage() {
         >
           {isDone && '✓'}
         </div>
+
+        {/* Title */}
         <div style={{
           flex: 1, fontSize: 13, fontWeight: 500,
           color: isDone ? '#9ca3af' : '#1a1a2e',
           textDecoration: isDone ? 'line-through' : 'none',
         }}>
           {task.title}
+          {task.notes && (
+            <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af' }}>· has notes</span>
+          )}
         </div>
+
+        {/* Meta */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {task.due_date && (
             <span style={{
@@ -467,12 +466,10 @@ export default function ProjectDetailPage() {
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
   })
 
-  // Group time entries by date for the time log tab
   const entriesByDate: Record<string, TimeEntry[]> = {}
   allEntries.forEach(entry => {
-    const dateKey = entry.entry_date
-    if (!entriesByDate[dateKey]) entriesByDate[dateKey] = []
-    entriesByDate[dateKey].push(entry)
+    if (!entriesByDate[entry.entry_date]) entriesByDate[entry.entry_date] = []
+    entriesByDate[entry.entry_date].push(entry)
   })
   const sortedDates = Object.keys(entriesByDate).sort((a, b) => b.localeCompare(a))
 
@@ -485,10 +482,7 @@ export default function ProjectDetailPage() {
         padding: '0 28px', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            onClick={() => router.push('/projects')}
-            style={{ fontSize: 13, color: '#9ca3af', cursor: 'pointer', fontWeight: 500 }}
-          >
+          <span onClick={() => router.push('/projects')} style={{ fontSize: 13, color: '#9ca3af', cursor: 'pointer', fontWeight: 500 }}>
             Projects
           </span>
           <span style={{ color: '#d1d5db' }}>{'>'}</span>
@@ -508,7 +502,6 @@ export default function ProjectDetailPage() {
 
           {/* LEFT COLUMN */}
           <div>
-            {/* Project header */}
             <div style={{ marginBottom: 24 }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e', marginBottom: 4 }}>{project.name}</div>
               {clientName && <div style={{ fontSize: 13, color: '#6b7280' }}>{clientName}</div>}
@@ -517,7 +510,6 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
               {[
                 { label: 'Start Date', value: project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
@@ -532,7 +524,6 @@ export default function ProjectDetailPage() {
               ))}
             </div>
 
-            {/* Task progress bar */}
             {totalTasks > 0 && (
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
@@ -547,7 +538,7 @@ export default function ProjectDetailPage() {
 
             {/* Tab bar */}
             <div style={{
-              display: 'flex', gap: 4, marginBottom: 0,
+              display: 'flex', gap: 4,
               background: 'white', borderRadius: '12px 12px 0 0',
               border: '1px solid #e5e7eb', borderBottom: 'none',
               padding: '12px 16px 0',
@@ -622,35 +613,23 @@ export default function ProjectDetailPage() {
             {/* ── TIME LOG TAB ── */}
             {activeTab === 'timelog' && (
               <div style={{ background: 'white', borderRadius: '0 0 12px 12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-                {/* Summary row */}
                 <div style={{
                   padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  display: 'flex', alignItems: 'center', gap: 24,
                 }}>
-                  <div style={{ display: 'flex', gap: 24 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Total Logged</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: budgetColor }}>{totalLogged.toFixed(1)}h</div>
+                  {[
+                    { label: 'Total Logged', value: `${totalLogged.toFixed(1)}h`, color: budgetColor },
+                    ...(budget > 0 ? [
+                      { label: 'Budget',    value: `${budget}h`,                         color: '#1a1a2e' },
+                      { label: 'Remaining', value: `${(budget - totalLogged).toFixed(1)}h`, color: (budget - totalLogged) < 0 ? '#dc2626' : '#1a1a2e' },
+                    ] : []),
+                    { label: 'Entries', value: `${allEntries.length}`, color: '#1a1a2e' },
+                  ].map(s => (
+                    <div key={s.label}>
+                      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>{s.label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</div>
                     </div>
-                    {budget > 0 && (
-                      <>
-                        <div>
-                          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Budget</div>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{budget}h</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Remaining</div>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: (budget - totalLogged) < 0 ? '#dc2626' : '#1a1a2e' }}>
-                            {(budget - totalLogged).toFixed(1)}h
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    <div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2 }}>Entries</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{allEntries.length}</div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
                 {allEntries.length === 0 && (
@@ -659,17 +638,14 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
 
-                {/* Entries grouped by date */}
                 {sortedDates.map(dateKey => {
-                  const dayEntries  = entriesByDate[dateKey]
-                  const dayTotal    = dayEntries.reduce((sum, e) => sum + e.hours, 0)
+                  const dayEntries = entriesByDate[dateKey]
+                  const dayTotal   = dayEntries.reduce((sum, e) => sum + e.hours, 0)
                   const displayDate = new Date(dateKey + 'T12:00:00').toLocaleDateString('en-US', {
                     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
                   })
-
                   return (
                     <div key={dateKey}>
-                      {/* Date header */}
                       <div style={{
                         padding: '8px 20px', fontSize: 11, fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -680,21 +656,16 @@ export default function ProjectDetailPage() {
                         <span>{displayDate}</span>
                         <span style={{ color: '#5046e5' }}>{dayTotal.toFixed(1)}h</span>
                       </div>
-
-                      {/* Entries for this date */}
                       {dayEntries.map((entry, i) => {
-                        const initials = (entry.user_name || 'U')
-                          .split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                        const initials = (entry.user_name || 'U').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
                         const colors = ['#5046e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444']
                         const avatarColor = colors[(entry.user_name || '').charCodeAt(0) % colors.length]
-
                         return (
                           <div key={entry.id} style={{
                             display: 'flex', alignItems: 'center', gap: 14,
                             padding: '12px 20px',
                             borderBottom: i < dayEntries.length - 1 ? '1px solid #f9fafb' : '1px solid #e5e7eb',
                           }}>
-                            {/* Avatar */}
                             <div style={{
                               width: 30, height: 30, borderRadius: '50%',
                               background: avatarColor, color: 'white',
@@ -703,20 +674,12 @@ export default function ProjectDetailPage() {
                             }}>
                               {initials}
                             </div>
-
-                            {/* Details */}
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>
-                                {entry.user_name || 'Unknown'}
-                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{entry.user_name || 'Unknown'}</div>
                               {entry.description && (
-                                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                                  {entry.description}
-                                </div>
+                                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{entry.description}</div>
                               )}
                             </div>
-
-                            {/* Hours */}
                             <div style={{ fontSize: 16, fontWeight: 700, color: '#5046e5', flexShrink: 0 }}>
                               {entry.hours}h
                             </div>
@@ -733,7 +696,6 @@ export default function ProjectDetailPage() {
           {/* RIGHT SIDEBAR */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* LOE Budget */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
                 Hours Budget
@@ -757,7 +719,6 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            {/* Recent time entries */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
               <div style={{
                 fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
@@ -766,10 +727,7 @@ export default function ProjectDetailPage() {
               }}>
                 <span>Recent Time</span>
                 {allEntries.length > 5 && (
-                  <button
-                    onClick={() => setActiveTab('timelog')}
-                    style={{ fontSize: 11, color: '#5046e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-                  >
+                  <button onClick={() => setActiveTab('timelog')} style={{ fontSize: 11, color: '#5046e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                     View all
                   </button>
                 )}
@@ -785,46 +743,32 @@ export default function ProjectDetailPage() {
                           {new Date(entry.entry_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </div>
                         {entry.description && (
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, lineHeight: 1.4 }}>
-                            {entry.description}
-                          </div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, lineHeight: 1.4 }}>{entry.description}</div>
                         )}
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#5046e5', marginLeft: 8, flexShrink: 0 }}>
-                        {entry.hours}h
-                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#5046e5', marginLeft: 8, flexShrink: 0 }}>{entry.hours}h</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Project info */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', marginBottom: 14 }}>
                 Project Info
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: '#6b7280' }}>Client</span>
-                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{clientName || '—'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: '#6b7280' }}>Status</span>
-                  <span style={{ fontWeight: 600, color: si.color }}>{si.label}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: '#6b7280' }}>Start</span>
-                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
-                    {project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: '#6b7280' }}>Due</span>
-                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
-                    {project.due_date ? new Date(project.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                  </span>
-                </div>
+                {[
+                  { label: 'Client', value: clientName || '—', color: '#1a1a2e' },
+                  { label: 'Status', value: si.label,          color: si.color },
+                  { label: 'Start',  value: project.start_date ? new Date(project.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—', color: '#1a1a2e' },
+                  { label: 'Due',    value: project.due_date   ? new Date(project.due_date   + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—', color: '#1a1a2e' },
+                ].map(row => (
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: '#6b7280' }}>{row.label}</span>
+                    <span style={{ fontWeight: 600, color: row.color }}>{row.value}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -848,6 +792,8 @@ export default function ProjectDetailPage() {
           onSaved={() => { setShowAddTask(false); loadProject() }}
         />
       )}
+
+      
     </AppLayout>
   )
 }
