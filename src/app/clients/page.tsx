@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import AppLayout from '@/components/AppLayout'
@@ -197,10 +198,11 @@ function ClientModal({ workspaceId, client, onClose, onSaved }: {
   )
 }
 
-function ClientCard({ client, onEdit, onDelete }: {
+function ClientCard({ client, onEdit, onDelete, onClick }: {
   client: Client
   onEdit: (c: Client) => void
   onDelete: (id: string) => void
+  onClick: () => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
 
@@ -215,10 +217,13 @@ function ClientCard({ client, onEdit, onDelete }: {
   const color  = colors[client.name.charCodeAt(0) % colors.length]
 
   return (
-    <div style={{
-      background: 'white', borderRadius: 12, border: '1px solid #e5e7eb',
-      padding: 20, position: 'relative',
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        background: 'white', borderRadius: 12, border: '1px solid #e5e7eb',
+        padding: 20, position: 'relative', cursor: 'pointer',
+      }}
+    >
       <div style={{ position: 'absolute', top: 16, right: 16 }}>
         <button
           onClick={() => setShowMenu(!showMenu)}
@@ -297,6 +302,7 @@ function ClientCard({ client, onEdit, onDelete }: {
 
 export default function ClientsPage() {
   const supabase = createClient()
+const router = useRouter() 
 
   const [clients,    setClients]    = useState<Client[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
@@ -404,11 +410,12 @@ export default function ClientsPage() {
               gap: 16,
             }}>
               {filtered.map(client => (
-                <ClientCard
-                  key={client.id}
-                  client={client}
-                  onEdit={c => { setEditClient(c); setShowModal(true) }}
-                  onDelete={handleDelete}
+  <ClientCard
+    key={client.id}
+    client={client}
+    onEdit={c => { setEditClient(c); setShowModal(true) }}
+    onDelete={handleDelete}
+    onClick={() => router.push(`/clients/${client.id}`)}
                 />
               ))}
             </div>
