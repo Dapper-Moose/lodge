@@ -11,6 +11,7 @@ type Project = {
   status: string
   due_date: string | null
   loe_budget: number | null
+  hours_logged?: number
 }
 
 type ActivityItem = {
@@ -100,10 +101,29 @@ export default function DashboardPage() {
       .select('id, name, status, due_date, loe_budget')
       .eq('workspace_id', wsId)
       .order('created_at', { ascending: false })
-      .limit(4)
+      .limit(5)
+
+    // Fetch time logged per project for LOE bars
+    const projectIds = (projects || []).map((p: any) => p.id)
+    const { data: allProjectTime } = projectIds.length > 0
+      ? await supabase
+          .from('time_entries')
+          .select('project_id, hours')
+          .in('project_id', projectIds)
+      : { data: [] }
+
+    // Sum hours per project
+    const hoursPerProject: Record<string, number> = {}
+    ;(allProjectTime || []).forEach((e: any) => {
+      hoursPerProject[e.project_id] = (hoursPerProject[e.project_id] || 0) + e.hours
+    })
+
+    const enrichedProjects: Project[] = (projects || []).map((p: any) => ({
+      ...p,
+      hours_logged: hoursPerProject[p.id] || 0,
+    }))
 
     // ── ACTIVITY FEED ──
-    // Recent time entries
     const { data: recentTime } = await supabase
       .from('time_entries')
       .select('id, hours, description, entry_date, project_id, user_id, created_at')
@@ -111,7 +131,6 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(10)
 
-    // Recently completed tasks
     const { data: recentTasks } = await supabase
       .from('tasks')
       .select('id, title, project_id, updated_at')
@@ -120,11 +139,10 @@ export default function DashboardPage() {
       .order('updated_at', { ascending: false })
       .limit(10)
 
-    // Get project names for activity
     const activityProjectIds = [
       ...new Set([
-        ...(recentTime  || []).map(t => t.project_id),
-        ...(recentTasks || []).map(t => t.project_id),
+        ...(recentTime  || []).map((t: any) => t.project_id),
+        ...(recentTasks || []).map((t: any) => t.project_id),
       ])
     ].filter(Boolean)
 
@@ -132,16 +150,14 @@ export default function DashboardPage() {
       ? await supabase.from('projects').select('id, name').in('id', activityProjectIds)
       : { data: [] }
 
-    // Get user profiles for activity
-    const activityUserIds = [...new Set((recentTime || []).map(t => t.user_id))].filter(Boolean)
+    const activityUserIds = [...new Set((recentTime || []).map((t: any) => t.user_id))].filter(Boolean)
     const { data: activityProfiles } = activityUserIds.length > 0
       ? await supabase.from('profiles').select('id, full_name').in('id', activityUserIds)
       : { data: [] }
 
-    // Build activity items
-    const timeItems: ActivityItem[] = (recentTime || []).map(entry => {
-      const proj     = (activityProjects || []).find(p => p.id === entry.project_id)
-      const prof     = (activityProfiles || []).find(p => p.id === entry.user_id)
+    const timeItems: ActivityItem[] = (recentTime || []).map((entry: any) => {
+      const proj      = (activityProjects || []).find((p: any) => p.id === entry.project_id)
+      const prof      = (activityProfiles || []).find((p: any) => p.id === entry.user_id)
       const firstName = prof?.full_name?.split(' ')[0] || 'Someone'
       return {
         id:           `time-${entry.id}`,
@@ -154,8 +170,8 @@ export default function DashboardPage() {
       }
     })
 
-    const taskItems: ActivityItem[] = (recentTasks || []).map(task => {
-      const proj = (activityProjects || []).find(p => p.id === task.project_id)
+    const taskItems: ActivityItem[] = (recentTasks || []).map((task: any) => {
+      const proj = (activityProjects || []).find((p: any) => p.id === task.project_id)
       return {
         id:           `task-${task.id}`,
         type:         'task_completed',
@@ -166,7 +182,6 @@ export default function DashboardPage() {
       }
     })
 
-    // Merge and sort by timestamp
     const allActivity = [...timeItems, ...taskItems]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 12)
@@ -175,7 +190,7 @@ export default function DashboardPage() {
     setOpenTasks(taskCount || 0)
     setHoursThisWeek(totalHours)
     setTeamMembers(memberCount || 0)
-    setRecentProjects((projects as Project[]) || [])
+    setRecentProjects(enrichedProjects)
     setActivity(allActivity)
     setLoading(false)
   }
@@ -203,6 +218,12 @@ export default function DashboardPage() {
       over_budget: 'Over Budget', completed: 'Completed',
     }
     return map[status] || status
+  }
+
+  function loeBarColor(pct: number) {
+    if (pct >= 100) return '#dc2626'
+    if (pct >= 75)  return '#d97706'
+    return '#16a34a'
   }
 
   function timeAgo(timestamp: string) {
@@ -297,35 +318,73 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {!loading && recentProjects.length > 0 && recentProjects.map((project, i) => (
-                <div
-                  key={project.id}
-                  onClick={() => router.push(`/projects/${project.id}`)}
-                  style={{
-                    padding: '14px 24px',
-                    borderBottom: i < recentProjects.length - 1 ? '1px solid #f3f4f6' : 'none',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#f9fafb' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'white' }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e' }}>{project.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    {project.due_date && (
-                      <span style={{ fontSize: 12, color: '#9ca3af' }}>
-                        Due {new Date(project.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
+              {!loading && recentProjects.map((project, i) => {
+                const logged  = project.hours_logged || 0
+                const budget  = project.loe_budget   || 0
+                const pct     = budget > 0 ? Math.min(Math.round((logged / budget) * 100), 100) : 0
+                const barColor = loeBarColor(pct)
+                const ss      = statusStyle(project.status)
+
+                return (
+                  <div
+                    key={project.id}
+                    onClick={() => router.push(`/projects/${project.id}`)}
+                    style={{
+                      padding: '14px 24px',
+                      borderBottom: i < recentProjects.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      display: 'flex', alignItems: 'center', gap: 16,
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#f9fafb' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'white' }}
+                  >
+                    {/* Colour dot */}
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: barColor,
+                    }} />
+
+                    {/* Name */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {project.name}
+                      </div>
+                      {project.due_date && (
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                          Due {new Date(project.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* LOE bar */}
+                    {budget > 0 ? (
+                      <div style={{ width: 120, flexShrink: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af', marginBottom: 4, fontFamily: 'monospace' }}>
+                          <span style={{ color: pct >= 100 ? '#dc2626' : '#6b7280', fontWeight: pct >= 100 ? 700 : 400 }}>
+                            {logged.toFixed(1)}h
+                          </span>
+                          <span>{budget}h</span>
+                        </div>
+                        <div style={{ height: 5, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.3s ease' }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ width: 120, flexShrink: 0, fontSize: 11, color: '#d1d5db', textAlign: 'right' }}>
+                        No budget set
+                      </div>
                     )}
+
+                    {/* Status badge */}
                     <span style={{
-                      ...statusStyle(project.status),
-                      fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 20,
+                      ...ss, fontSize: 11, fontWeight: 600,
+                      padding: '3px 8px', borderRadius: 20, flexShrink: 0,
                     }}>
                       {statusLabel(project.status)}
                     </span>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Activity feed */}
@@ -356,7 +415,6 @@ export default function DashboardPage() {
                           borderBottom: i < activity.length - 1 ? '1px solid #f9fafb' : 'none',
                         }}
                       >
-                        {/* Icon */}
                         <div style={{
                           width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                           background: ic.bg, color: ic.color,
@@ -365,8 +423,6 @@ export default function DashboardPage() {
                         }}>
                           {ic.icon}
                         </div>
-
-                        {/* Content */}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
                             {item.type === 'time_logged' && (
@@ -377,9 +433,7 @@ export default function DashboardPage() {
                                   <> on <span style={{ color: '#5046e5', fontWeight: 600 }}>{item.project_name}</span></>
                                 )}
                                 {item.description && item.description !== 'Logged time' && (
-                                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                                    {item.description}
-                                  </div>
+                                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{item.description}</div>
                                 )}
                               </>
                             )}
@@ -389,9 +443,7 @@ export default function DashboardPage() {
                                 {item.project_name && (
                                   <> on <span style={{ color: '#5046e5', fontWeight: 600 }}>{item.project_name}</span></>
                                 )}
-                                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                                  {item.description}
-                                </div>
+                                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{item.description}</div>
                               </>
                             )}
                           </div>

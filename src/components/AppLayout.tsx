@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Time Tracking', href: '/time',       icon: '◷' },
   { label: 'Team',          href: '/team',       icon: '◉' },
   { label: 'Clients',       href: '/clients',    icon: '◌' },
+  { label: 'Settings',      href: '/settings',   icon: '⚙' },
 ]
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
